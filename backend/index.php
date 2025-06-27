@@ -1,7 +1,7 @@
 <?php
 /**
  * 阔文展览后台管理系统 - 登录页面
- * 最终版本 - 2025年6月27日
+ * 最终版本 - 2025年6月27日 (包含跳转问题调试)
  */
 
 session_start();
@@ -10,6 +10,10 @@ require_once 'config/security.php';
 
 // 如果已经登录，直接跳转到仪表板
 if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
+    // 【调试代码】检查在跳转前是否有任何输出
+    if (headers_sent($file, $line)) {
+        die("调试信息：无法跳转。在文件 '{$file}' 的第 {$line} 行已有内容输出。请检查该文件及其包含的文件（如 config/*.php）的开头和结尾是否有空行或空格。");
+    }
     header('Location: dashboard.php');
     exit;
 }
@@ -47,6 +51,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = getDB()->prepare("INSERT INTO login_logs (user_id, username, login_status, ip_address, user_agent) VALUES (?, ?, 'success', ?, ?)");
                 $stmt->execute([$user['id'], $username, $_SERVER['REMOTE_ADDR'], $_SERVER['HTTP_USER_AGENT']]);
                 
+                // 【调试代码】检查在跳转前是否有任何输出
+                if (headers_sent($file, $line)) {
+                    die("调试信息：无法跳转。在文件 '{$file}' 的第 {$line} 行已有内容输出。请检查该文件及其包含的文件（如 config/*.php）的开头和结尾是否有空行或空格。");
+                }
                 header('Location: dashboard.php');
                 exit;
             } else {

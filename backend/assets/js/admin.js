@@ -1,485 +1,464 @@
 /**
- * 阔文展览后台管理系统脚本
- * 最终版本 - 2025年6月27日
+ * 阔文展览后台管理系统JavaScript
  */
 
-const Admin = {
+// 全局管理对象
+window.Admin = {
+    // 配置
+    config: {
+        baseUrl: '/admin',
+        csrfToken: '',
+        debug: false
+    },
+    
     // 初始化
     init: function() {
-        this.bindEvents();
+        this.initConfig();
+        this.initGlobalEvents();
         this.initComponents();
-        console.log('阔文展览后台管理系统已初始化');
+        this.initTooltips();
     },
-
-    // 绑定事件
-    bindEvents: function() {
+    
+    // 初始化配置
+    initConfig: function() {
+        if (window.adminConfig) {
+            this.config = { ...this.config, ...window.adminConfig };
+        }
+    },
+    
+    // 初始化全局事件
+    initGlobalEvents: function() {
         // 确认删除
-        $(document).on('click', '[data-action="delete"]', this.confirmDelete);
+        $(document).on('click', '[data-action="delete"]', this.handleDelete.bind(this));
         
         // 批量操作
-        $(document).on('change', '.check-all', this.toggleCheckAll);
-        $(document).on('click', '.batch-action', this.batchAction);
+        $(document).on('click', '[data-action="batch-delete"]', this.handleBatchDelete.bind(this));
+        
+        // 状态切换
+        $(document).on('click', '[data-action="toggle-status"]', this.handleToggleStatus.bind(this));
+        
+        // 表单提交
+        $(document).on('submit', 'form[data-ajax="true"]', this.handleAjaxForm.bind(this));
+        
+        // 搜索表单
+        $(document).on('submit', '.search-form', this.handleSearch.bind(this));
+        
+        // 全选/取消全选
+        $(document).on('change', '[data-action="select-all"]', this.handleSelectAll.bind(this));
         
         // 文件上传
-        $(document).on('change', 'input[type="file"]', this.handleFileUpload);
-        
-        // 表单验证
-        $(document).on('submit', 'form[data-validate="true"]', this.validateForm);
-        
-        // 快捷键
-        $(document).on('keydown', this.handleShortcuts);
-        
-        // 图片预览
-        $(document).on('change', 'input[type="file"][accept*="image"]', this.previewImages);
-        
-        // 富文本编辑器
-        this.initRichEditor();
+        $(document).on('change', '[data-action="upload-file"]', this.handleFileUpload.bind(this));
     },
-
+    
     // 初始化组件
     initComponents: function() {
-        // 初始化工具提示
-        if (typeof bootstrap !== 'undefined') {
-            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-            tooltipTriggerList.map(function(tooltipTriggerEl) {
-                return new bootstrap.Tooltip(tooltipTriggerEl);
-            });
-        }
+        // 初始化富文本编辑器
+        this.initEditor();
         
-        // 初始化下拉菜单
-        $('.dropdown-toggle').dropdown();
+        // 初始化图片上传
+        this.initImageUpload();
         
-        // 自动隐藏提示信息
-        setTimeout(function() {
-            $('.alert[data-auto-dismiss="true"]').fadeOut();
-        }, 5000);
+        // 初始化排序
+        this.initSortable();
     },
-
-    // 显示提示信息
-    showAlert: function(type, message, autoHide = true) {
-        const alertHtml = `
-            <div class="alert alert-${type} alert-dismissible fade show" role="alert">
-                <i class="bi bi-${this.getAlertIcon(type)} me-2"></i>
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        `;
-        
-        // 插入到页面顶部
-        $('.content-area').prepend(alertHtml);
-        
-        // 自动隐藏
-        if (autoHide) {
-            setTimeout(function() {
-                $('.alert').first().fadeOut();
-            }, 5000);
-        }
+    
+    // 初始化工具提示
+    initTooltips: function() {
+        $('[data-bs-toggle="tooltip"]').tooltip();
     },
-
-    // 获取提示图标
-    getAlertIcon: function(type) {
-        const icons = {
-            'success': 'check-circle',
-            'danger': 'exclamation-triangle',
-            'warning': 'exclamation-circle',
-            'info': 'info-circle'
-        };
-        return icons[type] || 'info-circle';
-    },
-
-    // 确认删除
-    confirmDelete: function(e) {
+    
+    // 处理删除操作
+    handleDelete: function(e) {
         e.preventDefault();
+        const $btn = $(e.currentTarget);
+        const url = $btn.data('url');
+        const message = $btn.data('message') || '您确定要删除这条记录吗？';
         
-        const target = $(this);
-        const url = target.data('url') || target.attr('href');
-        const message = target.data('message') || '确定要删除这个项目吗？此操作不可撤销。';
-        
-        $('#deleteMessage').text(message);
-        $('#confirmDeleteModal').modal('show');
-        
-        $('#confirmDeleteBtn').off('click').on('click', function() {
-            Admin.performDelete(url);
+        this.showConfirmDialog(message, function() {
+            Admin.deleteRecord(url);
         });
     },
-
-    // 执行删除
-    performDelete: function(url) {
-        $('#confirmDeleteModal').modal('hide');
-        this.showLoading('删除中...');
+    
+    // 处理批量删除
+    handleBatchDelete: function(e) {
+        e.preventDefault();
+        const selectedItems = $('input[name="selected_ids[]"]:checked');
+        
+        if (selectedItems.length === 0) {
+            this.showAlert('请选择要删除的项目', 'warning');
+            return;
+        }
+        
+        const ids = selectedItems.map(function() { return $(this).val(); }).get();
+        const url = $(e.currentTarget).data('url');
+        
+        this.showConfirmDialog(`您确定要删除选中的 ${ids.length} 项记录吗？`, function() {
+            Admin.batchDelete(url, ids);
+        });
+    },
+    
+    // 处理状态切换
+    handleToggleStatus: function(e) {
+        e.preventDefault();
+        const $btn = $(e.currentTarget);
+        const url = $btn.data('url');
         
         $.ajax({
             url: url,
             method: 'POST',
             data: {
-                action: 'delete',
-                csrf_token: window.AdminConfig.csrfToken
+                [this.config.csrfToken.name]: this.config.csrfToken,
+                action: 'toggle_status'
             },
-            dataType: 'json',
+            success: function(response) {
+                if (response.success) {
+                    location.reload();
+                } else {
+                    Admin.showAlert(response.message, 'error');
+                }
+            },
+            error: function() {
+                Admin.showAlert('操作失败，请重试', 'error');
+            }
+        });
+    },
+    
+    // 处理AJAX表单提交
+    handleAjaxForm: function(e) {
+        e.preventDefault();
+        const $form = $(e.currentTarget);
+        const url = $form.attr('action');
+        const data = new FormData($form[0]);
+        
+        this.showLoading();
+        
+        $.ajax({
+            url: url,
+            method: 'POST',
+            data: data,
+            processData: false,
+            contentType: false,
             success: function(response) {
                 Admin.hideLoading();
                 if (response.success) {
-                    Admin.showAlert('success', response.message || '删除成功');
-                    setTimeout(function() {
-                        window.location.reload();
-                    }, 1500);
+                    Admin.showAlert(response.message, 'success');
+                    if (response.redirect) {
+                        setTimeout(function() {
+                            window.location.href = response.redirect;
+                        }, 1500);
+                    }
                 } else {
-                    Admin.showAlert('danger', response.message || '删除失败');
+                    Admin.showAlert(response.message, 'error');
                 }
             },
             error: function() {
                 Admin.hideLoading();
-                Admin.showAlert('danger', '网络错误，删除失败');
+                Admin.showAlert('提交失败，请重试', 'error');
             }
         });
     },
-
-    // 批量选择
-    toggleCheckAll: function() {
-        const checked = $(this).prop('checked');
-        $(this).closest('table').find('input[type="checkbox"]:not(.check-all)').prop('checked', checked);
-        Admin.updateBatchActions();
-    },
-
-    // 更新批量操作状态
-    updateBatchActions: function() {
-        const checkedCount = $('input[type="checkbox"]:checked:not(.check-all)').length;
-        if (checkedCount > 0) {
-            $('.batch-actions').show();
-            $('.batch-count').text(checkedCount);
-        } else {
-            $('.batch-actions').hide();
-        }
-    },
-
-    // 批量操作
-    batchAction: function(e) {
+    
+    // 处理搜索
+    handleSearch: function(e) {
         e.preventDefault();
+        const $form = $(e.currentTarget);
+        const url = $form.attr('action');
+        const data = $form.serialize();
         
-        const action = $(this).data('action');
-        const checkedIds = [];
+        window.location.href = url + '?' + data;
+    },
+    
+    // 处理全选
+    handleSelectAll: function(e) {
+        const isChecked = $(e.currentTarget).prop('checked');
+        $('input[name="selected_ids[]"]').prop('checked', isChecked);
+        this.updateBatchActions();
+    },
+    
+    // 处理文件上传
+    handleFileUpload: function(e) {
+        const $input = $(e.currentTarget);
+        const files = e.target.files;
         
-        $('input[type="checkbox"]:checked:not(.check-all)').each(function() {
-            checkedIds.push($(this).val());
-        });
-        
-        if (checkedIds.length === 0) {
-            Admin.showAlert('warning', '请选择要操作的项目');
-            return;
-        }
-        
-        const confirmMessage = `确定要对选中的 ${checkedIds.length} 个项目执行"${$(this).text()}"操作吗？`;
-        
-        if (confirm(confirmMessage)) {
-            Admin.showLoading('处理中...');
-            
-            $.ajax({
-                url: window.location.href,
-                method: 'POST',
-                data: {
-                    action: 'batch_' + action,
-                    ids: checkedIds,
-                    csrf_token: window.AdminConfig.csrfToken
-                },
-                dataType: 'json',
-                success: function(response) {
-                    Admin.hideLoading();
-                    if (response.success) {
-                        Admin.showAlert('success', response.message || '操作完成');
-                        setTimeout(function() {
-                            window.location.reload();
-                        }, 1500);
-                    } else {
-                        Admin.showAlert('danger', response.message || '操作失败');
-                    }
-                },
-                error: function() {
-                    Admin.hideLoading();
-                    Admin.showAlert('danger', '网络错误，操作失败');
-                }
-            });
+        if (files.length > 0) {
+            this.uploadFiles(files, $input);
         }
     },
-
-    // 文件上传处理
-    handleFileUpload: function() {
-        const files = this.files;
-        const maxSize = $(this).data('max-size') || 5 * 1024 * 1024; // 5MB
-        const allowedTypes = $(this).data('allowed-types') || 'image/*';
-        
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            
-            // 检查文件大小
-            if (file.size > maxSize) {
-                Admin.showAlert('warning', `文件 ${file.name} 超过大小限制`);
-                $(this).val('');
-                return;
-            }
-            
-            // 检查文件类型
-            if (allowedTypes !== '*' && !file.type.match(allowedTypes)) {
-                Admin.showAlert('warning', `文件 ${file.name} 类型不支持`);
-                $(this).val('');
-                return;
-            }
-        }
-    },
-
-    // 图片预览
-    previewImages: function() {
-        const files = this.files;
-        const previewContainer = $(this).data('preview') || '.image-preview-container';
-        
-        $(previewContainer).empty();
-        
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            const reader = new FileReader();
-            
-            reader.onload = function(e) {
-                const previewHtml = `
-                    <div class="image-preview">
-                        <img src="${e.target.result}" alt="预览">
-                        <button type="button" class="remove-btn" onclick="Admin.removePreview(this)">
-                            <i class="bi bi-x"></i>
-                        </button>
-                    </div>
-                `;
-                $(previewContainer).append(previewHtml);
-            };
-            
-            reader.readAsDataURL(file);
-        }
-    },
-
-    // 移除预览
-    removePreview: function(btn) {
-        $(btn).closest('.image-preview').remove();
-    },
-
-    // 表单验证
-    validateForm: function(e) {
-        const form = $(this);
-        let isValid = true;
-        
-        // 清除之前的错误提示
-        form.find('.is-invalid').removeClass('is-invalid');
-        form.find('.invalid-feedback').remove();
-        
-        // 验证必填字段
-        form.find('[required]').each(function() {
-            const field = $(this);
-            const value = field.val().trim();
-            
-            if (!value) {
-                Admin.showFieldError(field, '此字段为必填项');
-                isValid = false;
-            }
-        });
-        
-        // 验证邮箱格式
-        form.find('input[type="email"]').each(function() {
-            const field = $(this);
-            const value = field.val().trim();
-            
-            if (value && !Admin.isValidEmail(value)) {
-                Admin.showFieldError(field, '请输入有效的邮箱地址');
-                isValid = false;
-            }
-        });
-        
-        // 验证手机号格式
-        form.find('input[data-type="phone"]').each(function() {
-            const field = $(this);
-            const value = field.val().trim();
-            
-            if (value && !Admin.isValidPhone(value)) {
-                Admin.showFieldError(field, '请输入有效的手机号码');
-                isValid = false;
-            }
-        });
-        
-        if (!isValid) {
-            e.preventDefault();
-            Admin.showAlert('warning', '请检查表单中的错误信息');
-        }
-        
-        return isValid;
-    },
-
-    // 显示字段错误
-    showFieldError: function(field, message) {
-        field.addClass('is-invalid');
-        field.after(`<div class="invalid-feedback">${message}</div>`);
-    },
-
-    // 验证邮箱
-    isValidEmail: function(email) {
-        const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return regex.test(email);
-    },
-
-    // 验证手机号
-    isValidPhone: function(phone) {
-        const regex = /^1[3-9]\d{9}$/;
-        return regex.test(phone);
-    },
-
-    // 显示加载
-    showLoading: function(text = '加载中...') {
-        $('#loadingText').text(text);
-        $('#loadingModal').modal('show');
-    },
-
-    // 隐藏加载
-    hideLoading: function() {
-        $('#loadingModal').modal('hide');
-    },
-
-    // 快捷键处理
-    handleShortcuts: function(e) {
-        // Ctrl+S 保存
-        if (e.ctrlKey && e.keyCode === 83) {
-            e.preventDefault();
-            const form = $('form').first();
-            if (form.length) {
-                form.submit();
-            }
-        }
-        
-        // Escape 取消
-        if (e.keyCode === 27) {
-            $('.modal').modal('hide');
-        }
-    },
-
-    // 初始化富文本编辑器
-    initRichEditor: function() {
-        // 这里可以集成富文本编辑器，如 TinyMCE 或 Quill
-        $('.rich-editor').each(function() {
-            // 示例：可以在这里初始化富文本编辑器
-            console.log('初始化富文本编辑器:', this);
-        });
-    },
-
-    // 数据表格增强
-    enhanceDataTable: function() {
-        $('.data-table').each(function() {
-            const table = $(this);
-            
-            // 添加搜索功能
-            if (table.data('search') !== false) {
-                Admin.addTableSearch(table);
-            }
-            
-            // 添加排序功能
-            if (table.data('sort') !== false) {
-                Admin.addTableSort(table);
-            }
-        });
-    },
-
-    // 添加表格搜索
-    addTableSearch: function(table) {
-        const searchHtml = `
-            <div class="table-search mb-3">
-                <div class="input-group">
-                    <span class="input-group-text">
-                        <i class="bi bi-search"></i>
-                    </span>
-                    <input type="text" class="form-control" placeholder="搜索...">
-                </div>
-            </div>
-        `;
-        
-        table.before(searchHtml);
-        
-        // 绑定搜索事件
-        table.prev('.table-search').find('input').on('keyup', function() {
-            const value = $(this).val().toLowerCase();
-            table.find('tbody tr').filter(function() {
-                $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1);
-            });
-        });
-    },
-
-    // 添加表格排序
-    addTableSort: function(table) {
-        table.find('thead th[data-sort]').each(function() {
-            $(this).addClass('sortable').append(' <i class="bi bi-arrow-down-up"></i>');
-        });
-        
-        table.on('click', 'thead th.sortable', function() {
-            const column = $(this).data('sort');
-            Admin.sortTable(table, column, $(this));
-        });
-    },
-
-    // 表格排序
-    sortTable: function(table, column, header) {
-        const rows = table.find('tbody tr').get();
-        const isAsc = header.hasClass('asc');
-        
-        rows.sort(function(a, b) {
-            const aVal = $(a).children().eq(header.index()).text();
-            const bVal = $(b).children().eq(header.index()).text();
-            
-            if (isAsc) {
-                return aVal > bVal ? -1 : 1;
-            } else {
-                return aVal < bVal ? -1 : 1;
-            }
-        });
-        
-        // 更新排序状态
-        table.find('thead th').removeClass('asc desc');
-        header.addClass(isAsc ? 'desc' : 'asc');
-        
-        // 重新排列行
-        $.each(rows, function(index, row) {
-            table.children('tbody').append(row);
-        });
-    },
-
-    // AJAX表单提交
-    submitForm: function(form, callback) {
-        const formData = new FormData(form[0]);
-        formData.append('csrf_token', window.AdminConfig.csrfToken);
+    
+    // 删除记录
+    deleteRecord: function(url) {
+        this.showLoading();
         
         $.ajax({
-            url: form.attr('action') || window.location.href,
-            method: form.attr('method') || 'POST',
-            data: formData,
-            processData: false,
-            contentType: false,
-            dataType: 'json',
+            url: url,
+            method: 'POST',
+            data: {
+                [this.config.csrfToken.name]: this.config.csrfToken,
+                action: 'delete'
+            },
             success: function(response) {
-                if (callback) {
-                    callback(response);
+                Admin.hideLoading();
+                if (response.success) {
+                    Admin.showAlert(response.message, 'success');
+                    setTimeout(function() {
+                        location.reload();
+                    }, 1500);
                 } else {
-                    if (response.success) {
-                        Admin.showAlert('success', response.message || '操作成功');
-                        if (response.redirect) {
-                            setTimeout(function() {
-                                window.location.href = response.redirect;
-                            }, 1500);
-                        }
-                    } else {
-                        Admin.showAlert('danger', response.message || '操作失败');
-                    }
+                    Admin.showAlert(response.message, 'error');
                 }
             },
             error: function() {
-                if (callback) {
-                    callback({ success: false, message: '网络错误' });
-                } else {
-                    Admin.showAlert('danger', '网络错误，请稍后重试');
-                }
+                Admin.hideLoading();
+                Admin.showAlert('删除失败，请重试', 'error');
             }
         });
     },
-
+    
+    // 批量删除
+    batchDelete: function(url, ids) {
+        this.showLoading();
+        
+        $.ajax({
+            url: url,
+            method: 'POST',
+            data: {
+                [this.config.csrfToken.name]: this.config.csrfToken,
+                action: 'batch_delete',
+                ids: ids
+            },
+            success: function(response) {
+                Admin.hideLoading();
+                if (response.success) {
+                    Admin.showAlert(response.message, 'success');
+                    setTimeout(function() {
+                        location.reload();
+                    }, 1500);
+                } else {
+                    Admin.showAlert(response.message, 'error');
+                }
+            },
+            error: function() {
+                Admin.hideLoading();
+                Admin.showAlert('批量删除失败，请重试', 'error');
+            }
+        });
+    },
+    
+    // 上传文件
+    uploadFiles: function(files, $input) {
+        const formData = new FormData();
+        
+        for (let i = 0; i < files.length; i++) {
+            formData.append('files[]', files[i]);
+        }
+        formData.append(this.config.csrfToken.name, this.config.csrfToken);
+        
+        this.showLoading();
+        
+        $.ajax({
+            url: this.config.baseUrl + '/modules/files/upload.php',
+            method: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                Admin.hideLoading();
+                if (response.success) {
+                    Admin.showAlert('文件上传成功', 'success');
+                    // 触发自定义事件
+                    $input.trigger('upload.success', [response.files]);
+                } else {
+                    Admin.showAlert(response.message, 'error');
+                }
+            },
+            error: function() {
+                Admin.hideLoading();
+                Admin.showAlert('文件上传失败', 'error');
+            }
+        });
+    },
+    
+    // 显示确认对话框
+    showConfirmDialog: function(message, callback) {
+        const $modal = $('#confirmDeleteModal');
+        $modal.find('.modal-body p').text(message);
+        
+        $('#confirmDeleteBtn').off('click').on('click', function() {
+            $modal.modal('hide');
+            if (typeof callback === 'function') {
+                callback();
+            }
+        });
+        
+        $modal.modal('show');
+    },
+    
+    // 显示加载状态
+    showLoading: function() {
+        $('#loadingModal').modal('show');
+    },
+    
+    // 隐藏加载状态
+    hideLoading: function() {
+        $('#loadingModal').modal('hide');
+    },
+    
+    // 显示提示消息
+    showAlert: function(message, type = 'info') {
+        const alertClass = {
+            'success': 'alert-success',
+            'error': 'alert-danger',
+            'warning': 'alert-warning',
+            'info': 'alert-info'
+        };
+        
+        const $alert = $(`
+            <div class="alert ${alertClass[type]} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `);
+        
+        $('.container-fluid').first().prepend($alert);
+        
+        // 自动隐藏
+        setTimeout(function() {
+            $alert.fadeOut();
+        }, 5000);
+    },
+    
+    // 更新批量操作按钮状态
+    updateBatchActions: function() {
+        const selectedCount = $('input[name="selected_ids[]"]:checked').length;
+        const $batchActions = $('.batch-actions');
+        
+        if (selectedCount > 0) {
+            $batchActions.removeClass('d-none');
+            $batchActions.find('.selected-count').text(selectedCount);
+        } else {
+            $batchActions.addClass('d-none');
+        }
+    },
+    
+    // 初始化富文本编辑器
+    initEditor: function() {
+        if (typeof ClassicEditor !== 'undefined') {
+            $('.rich-editor').each(function() {
+                const element = this;
+                ClassicEditor
+                    .create(element, {
+                        language: 'zh-cn',
+                        toolbar: [
+                            'heading', '|',
+                            'bold', 'italic', 'link', '|',
+                            'bulletedList', 'numberedList', '|',
+                            'blockQuote', 'insertTable', '|',
+                            'undo', 'redo'
+                        ]
+                    })
+                    .catch(error => {
+                        console.error('编辑器初始化失败:', error);
+                    });
+            });
+        }
+    },
+    
+    // 初始化图片上传
+    initImageUpload: function() {
+        // 拖拽上传
+        $('.upload-area').on('dragover', function(e) {
+            e.preventDefault();
+            $(this).addClass('dragover');
+        }).on('dragleave', function(e) {
+            e.preventDefault();
+            $(this).removeClass('dragover');
+        }).on('drop', function(e) {
+            e.preventDefault();
+            $(this).removeClass('dragover');
+            
+            const files = e.originalEvent.dataTransfer.files;
+            if (files.length > 0) {
+                Admin.uploadFiles(files, $(this));
+            }
+        });
+    },
+    
+    // 初始化排序
+    initSortable: function() {
+        if (typeof Sortable !== 'undefined') {
+            $('.sortable').each(function() {
+                new Sortable(this, {
+                    animation: 150,
+                    handle: '.sort-handle',
+                    onEnd: function(evt) {
+                        // 处理排序更新
+                        Admin.updateSortOrder(evt);
+                    }
+                });
+            });
+        }
+    },
+    
+    // 更新排序
+    updateSortOrder: function(evt) {
+        const $table = $(evt.to);
+        const url = $table.data('sort-url');
+        
+        if (!url) return;
+        
+        const sortData = [];
+        $table.find('tr[data-id]').each(function(index) {
+            sortData.push({
+                id: $(this).data('id'),
+                sort_order: index + 1
+            });
+        });
+        
+        $.ajax({
+            url: url,
+            method: 'POST',
+            data: {
+                [this.config.csrfToken.name]: this.config.csrfToken,
+                action: 'update_sort',
+                sort_data: sortData
+            },
+            success: function(response) {
+                if (response.success) {
+                    Admin.showAlert('排序更新成功', 'success');
+                } else {
+                    Admin.showAlert(response.message, 'error');
+                }
+            },
+            error: function() {
+                Admin.showAlert('排序更新失败', 'error');
+            }
+        });
+    },
+    
+    // 图片预览
+    previewImage: function(input, container) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const $preview = $(`
+                    <div class="image-preview">
+                        <img src="${e.target.result}" alt="预览">
+                        <button type="button" class="remove-image" onclick="Admin.removeImagePreview(this)">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                `);
+                $(container).append($preview);
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    },
+    
+    // 移除图片预览
+    removeImagePreview: function(btn) {
+        $(btn).closest('.image-preview').remove();
+    },
+    
     // 工具函数
     utils: {
         // 格式化文件大小
@@ -491,22 +470,15 @@ const Admin = {
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         },
         
-        // 格式化日期
-        formatDate: function(dateString) {
-            const date = new Date(dateString);
-            return date.getFullYear() + '-' + 
-                   String(date.getMonth() + 1).padStart(2, '0') + '-' + 
-                   String(date.getDate()).padStart(2, '0');
+        // 获取文件扩展名
+        getFileExtension: function(filename) {
+            return filename.split('.').pop().toLowerCase();
         },
         
-        // 生成随机字符串
-        randomString: function(length = 8) {
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-            let result = '';
-            for (let i = 0; i < length; i++) {
-                result += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            return result;
+        // 验证邮箱
+        validateEmail: function(email) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(email);
         },
         
         // 防抖函数
@@ -524,11 +496,22 @@ const Admin = {
     }
 };
 
-// 页面加载完成后自动初始化
+// 文档就绪后初始化
 $(document).ready(function() {
     Admin.init();
-    Admin.enhanceDataTable();
+    
+    // 监听复选框变化，更新批量操作
+    $(document).on('change', 'input[name="selected_ids[]"]', function() {
+        Admin.updateBatchActions();
+    });
 });
 
-// 导出到全局作用域
+// 全局错误处理
+window.addEventListener('error', function(e) {
+    if (Admin.config.debug) {
+        console.error('JavaScript错误:', e.error);
+    }
+});
+
+// 导出到全局
 window.Admin = Admin;

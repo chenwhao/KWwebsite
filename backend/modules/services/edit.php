@@ -1,284 +1,206 @@
 <?php
 /**
  * 服务项目编辑
- * 阔文展览后台管理系统 - 最终版本
+ * 阔文展览后台管理系统
  */
 
-$id = isset($_GET['id']) ? intval($_GET['id']) : 0;
-$pageTitle = $id > 0 ? '编辑服务项目' : '添加服务项目';
-$currentPage = 'services';
-$currentModule = 'services';
+$id = intval($_GET['id'] ?? 0);
+$isEdit = $id > 0;
 
-require_once '../../includes/header.php';
+$pageTitle = ($isEdit ? '编辑服务项目' : '添加服务项目') . ' - 阔文展览后台管理';
+$currentPage = 'service_edit';
+$breadcrumbs = [
+    ['name' => '服务项目管理', 'url' => '/admin/modules/services/index.php'],
+    ['name' => $isEdit ? '编辑服务项目' : '添加服务项目']
+];
 
-// 处理表单提交
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    try {
-        Security::validateCSRF($_POST['csrf_token']);
-        
-        $data = [
-            'category_id' => $_POST['category_id'] ? intval($_POST['category_id']) : null,
-            'title' => Security::sanitize($_POST['title']),
-            'subtitle' => Security::sanitize($_POST['subtitle']),
-            'description' => Security::sanitize($_POST['description']),
-            'content' => $_POST['content'], // 富文本内容不过度清理
-            'price_range' => Security::sanitize($_POST['price_range']),
-            'duration' => Security::sanitize($_POST['duration']),
-            'tags' => Security::sanitize($_POST['tags']),
-            'sort_order' => intval($_POST['sort_order']),
-            'status' => in_array($_POST['status'], ['active', 'inactive']) ? $_POST['status'] : 'active'
-        ];
-        
-        // 验证必填字段
-        if (empty($data['title'])) {
-            throw new Exception('请填写服务标题');
-        }
-        
-        // 处理特色功能
-        $features = [];
-        if (!empty($_POST['features'])) {
-            $feature_lines = explode("\n", $_POST['features']);
-            foreach ($feature_lines as $line) {
-                $line = trim($line);
-                if ($line) {
-                    $features[] = $line;
-                }
-            }
-        }
-        $data['features'] = json_encode($features, JSON_UNESCAPED_UNICODE);
-        
-        if ($id > 0) {
-            // 更新
-            $sql = "UPDATE services SET 
-                    category_id = ?, title = ?, subtitle = ?, description = ?, content = ?,
-                    features = ?, price_range = ?, duration = ?, tags = ?, 
-                    sort_order = ?, status = ?, updated_at = NOW()
-                    WHERE id = ?";
-            $params = array_values($data);
-            $params[] = $id;
-            updateRecord($sql, $params);
-            
-            Security::logOperation('update', 'services', $id, '更新服务项目: ' . $data['title']);
-            $message = '服务项目更新成功';
-        } else {
-            // 新增
-            $sql = "INSERT INTO services 
-                    (category_id, title, subtitle, description, content, features, 
-                     price_range, duration, tags, sort_order, status) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            $id = insertRecord($sql, array_values($data));
-            
-            Security::logOperation('create', 'services', $id, '添加服务项目: ' . $data['title']);
-            $message = '服务项目添加成功';
-        }
-        
-        if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
-            successResponse($message, ['id' => $id, 'redirect' => 'index.php']);
-        } else {
-            $_SESSION['success_message'] = $message;
-            header('Location: index.php');
-            exit;
-        }
-        
-    } catch (Exception $e) {
-        if (isset($_POST['ajax']) && $_POST['ajax'] === '1') {
-            errorResponse($e->getMessage());
-        } else {
-            $_SESSION['error_message'] = $e->getMessage();
-        }
-    }
-}
+require_once __DIR__ . '/../../includes/header.php';
 
-// 获取服务信息
-if ($id > 0) {
+// 获取服务数据
+$service = null;
+if ($isEdit) {
     $service = fetchOne("SELECT * FROM services WHERE id = ?", [$id]);
     if (!$service) {
-        $_SESSION['error_message'] = '服务项目不存在';
-        header('Location: index.php');
+        header('Location: /admin/modules/services/index.php');
         exit;
     }
-    
-    // 解析特色功能
-    $features = json_decode($service['features'], true) ?: [];
-} else {
-    $service = [
-        'category_id' => '',
-        'title' => '',
-        'subtitle' => '',
-        'description' => '',
-        'content' => '',
-        'price_range' => '',
-        'duration' => '',
-        'tags' => '',
-        'sort_order' => 0,
-        'status' => 'active'
-    ];
-    $features = [];
 }
 
-// 获取分类列表
-$categories = fetchAll("SELECT * FROM service_categories WHERE status = 'active' ORDER BY sort_order");
+// Bootstrap图标列表
+$icons = [
+    'gear' => '齿轮',
+    'lightbulb' => '灯泡',
+    'wrench' => '扳手',
+    'tools' => '工具',
+    'briefcase' => '公文包',
+    'building' => '建筑',
+    'paint-bucket' => '油漆桶',
+    'palette' => '调色板',
+    'pencil-square' => '编辑',
+    'camera' => '相机',
+    'image' => '图片',
+    'graph-up' => '图表',
+    'award' => '奖杯',
+    'star' => '星星',
+    'heart' => '心形',
+    'shield-check' => '盾牌',
+    'clock' => '时钟',
+    'calendar' => '日历'
+];
 ?>
-
-<!-- 成功/错误提示 -->
-<?php if (isset($_SESSION['success_message'])): ?>
-    <div class="alert alert-success alert-dismissible fade show">
-        <i class="bi bi-check-circle me-2"></i>
-        <?= htmlspecialchars($_SESSION['success_message']) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-    <?php unset($_SESSION['success_message']); ?>
-<?php endif; ?>
-
-<?php if (isset($_SESSION['error_message'])): ?>
-    <div class="alert alert-danger alert-dismissible fade show">
-        <i class="bi bi-exclamation-triangle me-2"></i>
-        <?= htmlspecialchars($_SESSION['error_message']) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-    <?php unset($_SESSION['error_message']); ?>
-<?php endif; ?>
 
 <div class="row">
     <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <div class="d-flex justify-content-between align-items-center">
-                    <h5 class="card-title mb-0">
-                        <i class="bi bi-gear me-2"></i>
-                        <?= $pageTitle ?>
-                    </h5>
-                    <div>
-                        <a href="index.php" class="btn btn-outline-secondary btn-sm me-2">
-                            <i class="bi bi-arrow-left me-1"></i>
-                            返回列表
-                        </a>
-                        <button type="button" class="btn btn-primary btn-sm" onclick="saveService()">
-                            <i class="bi bi-check-lg me-1"></i>
-                            保存
-                        </button>
-                    </div>
-                </div>
+                <h5 class="mb-0">
+                    <i class="bi bi-<?php echo $isEdit ? 'pencil' : 'plus'; ?> me-2"></i>
+                    <?php echo $isEdit ? '编辑服务项目' : '添加服务项目'; ?>
+                </h5>
             </div>
-            
             <div class="card-body">
-                <form id="serviceForm" method="POST" data-validate="true">
-                    <input type="hidden" name="csrf_token" value="<?= Security::generateCSRFToken() ?>">
+                <form id="serviceForm" data-ajax="true" action="/admin/modules/services/process.php">
+                    <input type="hidden" name="<?php echo CSRF_TOKEN_NAME; ?>" value="<?php echo Security::generateCSRFToken(); ?>">
+                    <input type="hidden" name="action" value="<?php echo $isEdit ? 'update' : 'create'; ?>">
+                    <?php if ($isEdit): ?>
+                        <input type="hidden" name="id" value="<?php echo $service['id']; ?>">
+                    <?php endif; ?>
                     
                     <div class="row">
-                        <!-- 基本信息 -->
                         <div class="col-md-8">
-                            <div class="card mb-4">
-                                <div class="card-header">
-                                    <h6 class="card-title mb-0">基本信息</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="mb-3">
-                                        <label class="form-label" for="title">
-                                            服务标题 <span class="text-danger">*</span>
-                                        </label>
-                                        <input type="text" class="form-control" id="title" name="title" 
-                                               value="<?= htmlspecialchars($service['title']) ?>" required>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label class="form-label" for="subtitle">副标题</label>
-                                        <input type="text" class="form-control" id="subtitle" name="subtitle" 
-                                               value="<?= htmlspecialchars($service['subtitle']) ?>">
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label class="form-label" for="description">服务描述</label>
-                                        <textarea class="form-control" id="description" name="description" rows="4"><?= htmlspecialchars($service['description']) ?></textarea>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label class="form-label" for="content">详细内容</label>
-                                        <textarea class="form-control rich-editor" id="content" name="content" rows="8"><?= htmlspecialchars($service['content']) ?></textarea>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label class="form-label" for="features">服务特色（每行一个）</label>
-                                        <textarea class="form-control" id="features" name="features" rows="5" 
-                                                  placeholder="专业设计团队&#10;一站式服务&#10;品质保证"><?= implode("\n", $features) ?></textarea>
-                                    </div>
-                                </div>
+                            <div class="mb-3">
+                                <label for="title" class="form-label">服务标题 <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="title" name="title" 
+                                       value="<?php echo htmlspecialchars($service['title'] ?? ''); ?>" required>
                             </div>
                         </div>
-                        
-                        <!-- 设置信息 -->
                         <div class="col-md-4">
-                            <div class="card mb-4">
-                                <div class="card-header">
-                                    <h6 class="card-title mb-0">设置</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="mb-3">
-                                        <label class="form-label" for="category_id">服务分类</label>
-                                        <select class="form-select" id="category_id" name="category_id">
-                                            <option value="">请选择分类</option>
-                                            <?php foreach ($categories as $cat): ?>
-                                                <option value="<?= $cat['id'] ?>" 
-                                                        <?= $service['category_id'] == $cat['id'] ? 'selected' : '' ?>>
-                                                    <?= htmlspecialchars($cat['name']) ?>
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label class="form-label" for="price_range">价格区间</label>
-                                        <input type="text" class="form-control" id="price_range" name="price_range" 
-                                               value="<?= htmlspecialchars($service['price_range']) ?>"
-                                               placeholder="例如：5000-20000元">
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label class="form-label" for="duration">服务周期</label>
-                                        <input type="text" class="form-control" id="duration" name="duration" 
-                                               value="<?= htmlspecialchars($service['duration']) ?>"
-                                               placeholder="例如：7-15个工作日">
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label class="form-label" for="tags">标签</label>
-                                        <input type="text" class="form-control" id="tags" name="tags" 
-                                               value="<?= htmlspecialchars($service['tags']) ?>"
-                                               placeholder="用逗号分隔多个标签">
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label class="form-label" for="sort_order">排序</label>
-                                        <input type="number" class="form-control" id="sort_order" name="sort_order" 
-                                               value="<?= $service['sort_order'] ?>" min="0">
-                                        <small class="form-text text-muted">数字越小排序越靠前</small>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <label class="form-label" for="status">状态</label>
-                                        <select class="form-select" id="status" name="status">
-                                            <option value="active" <?= $service['status'] === 'active' ? 'selected' : '' ?>>启用</option>
-                                            <option value="inactive" <?= $service['status'] === 'inactive' ? 'selected' : '' ?>>禁用</option>
-                                        </select>
-                                    </div>
+                            <div class="mb-3">
+                                <label for="icon" class="form-label">图标</label>
+                                <select class="form-select" id="icon" name="icon">
+                                    <option value="">选择图标</option>
+                                    <?php foreach ($icons as $iconName => $iconLabel): ?>
+                                        <option value="<?php echo $iconName; ?>" 
+                                                <?php echo ($service['icon'] ?? '') === $iconName ? 'selected' : ''; ?>>
+                                            <?php echo $iconLabel; ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <div class="mt-2">
+                                    <small class="text-muted">图标预览：</small>
+                                    <i id="iconPreview" class="bi bi-<?php echo $service['icon'] ?? 'gear'; ?> ms-2"></i>
                                 </div>
                             </div>
                         </div>
                     </div>
                     
+                    <div class="mb-3">
+                        <label for="subtitle" class="form-label">服务副标题</label>
+                        <input type="text" class="form-control" id="subtitle" name="subtitle" 
+                               value="<?php echo htmlspecialchars($service['subtitle'] ?? ''); ?>">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">服务描述</label>
+                        <textarea class="form-control" id="description" name="description" rows="3"><?php echo htmlspecialchars($service['description'] ?? ''); ?></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="content" class="form-label">详细内容</label>
+                        <textarea class="form-control rich-editor" id="content" name="content" rows="8"><?php echo htmlspecialchars($service['content'] ?? ''); ?></textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">特色图片</label>
+                        <div class="upload-area" id="imageUpload">
+                            <div class="upload-icon">
+                                <i class="bi bi-cloud-upload"></i>
+                            </div>
+                            <h6>点击或拖拽上传图片</h6>
+                            <p class="text-muted">支持 JPG、PNG 格式，文件大小不超过 5MB</p>
+                            <input type="file" class="d-none" id="featured_image_file" name="featured_image_file" accept="image/*">
+                        </div>
+                        <?php if (!empty($service['featured_image'])): ?>
+                            <div class="mt-2">
+                                <img src="<?php echo htmlspecialchars($service['featured_image']); ?>" 
+                                     alt="当前图片" class="img-thumbnail" style="max-height: 200px;">
+                            </div>
+                        <?php endif; ?>
+                        <input type="hidden" id="featured_image" name="featured_image" value="<?php echo htmlspecialchars($service['featured_image'] ?? ''); ?>">
+                    </div>
+                    
                     <div class="row">
-                        <div class="col-12">
-                            <div class="d-flex justify-content-end">
-                                <a href="index.php" class="btn btn-outline-secondary me-2">
-                                    <i class="bi bi-arrow-left me-1"></i>
-                                    返回列表
-                                </a>
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-check-lg me-1"></i>
-                                    保存
-                                </button>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="features" class="form-label">服务特色</label>
+                                <textarea class="form-control" id="features" name="features" rows="6" 
+                                          placeholder="每行一个特色，例如：&#10;创意设计&#10;专业团队&#10;优质服务"><?php echo htmlspecialchars($service['features'] ?? ''); ?></textarea>
+                                <small class="text-muted">每行一个特色点</small>
                             </div>
                         </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="process" class="form-label">服务流程</label>
+                                <textarea class="form-control" id="process" name="process" rows="6" 
+                                          placeholder="每行一个流程步骤，例如：&#10;需求分析&#10;方案设计&#10;项目实施"><?php echo htmlspecialchars($service['process'] ?? ''); ?></textarea>
+                                <small class="text-muted">每行一个流程步骤</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="sort_order" class="form-label">排序</label>
+                                <input type="number" class="form-control" id="sort_order" name="sort_order" 
+                                       value="<?php echo $service['sort_order'] ?? 0; ?>" min="0">
+                                <small class="text-muted">数字越小排序越靠前</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="status" class="form-label">状态</label>
+                                <select class="form-select" id="status" name="status">
+                                    <option value="active" <?php echo ($service['status'] ?? 'active') === 'active' ? 'selected' : ''; ?>>启用</option>
+                                    <option value="inactive" <?php echo ($service['status'] ?? '') === 'inactive' ? 'selected' : ''; ?>>禁用</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- SEO设置 -->
+                    <div class="card mt-4">
+                        <div class="card-header">
+                            <h6 class="mb-0">SEO设置</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="seo_title" class="form-label">SEO标题</label>
+                                <input type="text" class="form-control" id="seo_title" name="seo_title" 
+                                       value="<?php echo htmlspecialchars($service['seo_title'] ?? ''); ?>">
+                                <small class="text-muted">如果为空，将使用服务标题</small>
+                            </div>
+                            <div class="mb-3">
+                                <label for="seo_keywords" class="form-label">SEO关键词</label>
+                                <input type="text" class="form-control" id="seo_keywords" name="seo_keywords" 
+                                       value="<?php echo htmlspecialchars($service['seo_keywords'] ?? ''); ?>"
+                                       placeholder="用逗号分隔多个关键词">
+                            </div>
+                            <div class="mb-3">
+                                <label for="seo_description" class="form-label">SEO描述</label>
+                                <textarea class="form-control" id="seo_description" name="seo_description" rows="3"><?php echo htmlspecialchars($service['seo_description'] ?? ''); ?></textarea>
+                                <small class="text-muted">如果为空，将使用服务描述</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-end mt-4">
+                        <a href="/admin/modules/services/index.php" class="btn btn-secondary me-2">
+                            <i class="bi bi-arrow-left me-2"></i>返回列表
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-2"></i><?php echo $isEdit ? '更新' : '添加'; ?>服务
+                        </button>
                     </div>
                 </form>
             </div>
@@ -286,54 +208,112 @@ $categories = fetchAll("SELECT * FROM service_categories WHERE status = 'active'
     </div>
 </div>
 
-<script>
-function saveService() {
-    $('#serviceForm').submit();
-}
+<?php 
+$extraJS = [
+    'https://cdn.ckeditor.com/ckeditor5/39.0.1/classic/ckeditor.js'
+];
+require_once __DIR__ . '/../../includes/footer.php'; 
+?>
 
-// AJAX表单提交
-$('#serviceForm').on('submit', function(e) {
-    e.preventDefault();
+<script>
+$(document).ready(function() {
+    // 初始化富文本编辑器
+    if (typeof ClassicEditor !== 'undefined') {
+        ClassicEditor.create(document.querySelector('#content'), {
+            language: 'zh-cn',
+            toolbar: ['heading', '|', 'bold', 'italic', 'link', '|', 'bulletedList', 'numberedList', '|', 'blockQuote', 'insertTable', '|', 'undo', 'redo']
+        }).catch(error => {
+            console.error('编辑器初始化失败:', error);
+        });
+    }
     
-    const form = $(this);
-    const submitBtn = form.find('button[type="submit"]');
-    const originalText = submitBtn.html();
+    // 图标预览更新
+    $('#icon').on('change', function() {
+        const iconName = $(this).val();
+        $('#iconPreview').attr('class', 'bi bi-' + (iconName || 'gear') + ' ms-2');
+    });
     
-    // 显示加载状态
-    submitBtn.prop('disabled', true).html('<i class="spinner-border spinner-border-sm me-2"></i>保存中...');
+    // 图片上传
+    $('#imageUpload').on('click', function() {
+        $('#featured_image_file').click();
+    });
     
-    // 添加AJAX标识
-    const formData = new FormData(this);
-    formData.append('ajax', '1');
-    
-    $.ajax({
-        url: '',
-        method: 'POST',
-        data: formData,
-        processData: false,
-        contentType: false,
-        dataType: 'json',
-        success: function(response) {
-            if (response.success) {
-                Admin.showAlert('success', response.message || '保存成功');
-                if (response.data && response.data.redirect) {
-                    setTimeout(function() {
-                        window.location.href = response.data.redirect;
-                    }, 1500);
+    $('#featured_image_file').on('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('category', 'service');
+            formData.append('<?php echo CSRF_TOKEN_NAME; ?>', '<?php echo Security::generateCSRFToken(); ?>');
+            
+            Admin.showLoading();
+            
+            $.ajax({
+                url: '/admin/modules/files/upload.php',
+                method: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    Admin.hideLoading();
+                    if (response.success && response.files && response.files[0]) {
+                        const file = response.files[0];
+                        $('#featured_image').val(file.file_path);
+                        
+                        // 显示预览
+                        const preview = `<div class="mt-2">
+                            <img src="/${file.file_path}" alt="图片预览" class="img-thumbnail" style="max-height: 200px;">
+                        </div>`;
+                        $('#imageUpload').after(preview);
+                        
+                        Admin.showAlert('图片上传成功', 'success');
+                    } else {
+                        Admin.showAlert(response.message || '上传失败', 'error');
+                    }
+                },
+                error: function() {
+                    Admin.hideLoading();
+                    Admin.showAlert('上传失败，请重试', 'error');
                 }
-            } else {
-                Admin.showAlert('danger', response.message || '保存失败');
-            }
-        },
-        error: function() {
-            Admin.showAlert('danger', '网络错误，保存失败');
-        },
-        complete: function() {
-            // 恢复按钮状态
-            submitBtn.prop('disabled', false).html(originalText);
+            });
         }
+    });
+    
+    // 表单提交
+    $('#serviceForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        
+        // 获取富文本编辑器内容
+        if (window.contentEditor) {
+            formData.set('content', window.contentEditor.getData());
+        }
+        
+        Admin.showLoading();
+        
+        $.ajax({
+            url: $(this).attr('action'),
+            method: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                Admin.hideLoading();
+                if (response.success) {
+                    Admin.showAlert(response.message, 'success');
+                    setTimeout(function() {
+                        window.location.href = '/admin/modules/services/index.php';
+                    }, 1500);
+                } else {
+                    Admin.showAlert(response.message, 'error');
+                }
+            },
+            error: function() {
+                Admin.hideLoading();
+                Admin.showAlert('提交失败，请重试', 'error');
+            }
+        });
     });
 });
 </script>
-
-<?php require_once '../../includes/footer.php'; ?>

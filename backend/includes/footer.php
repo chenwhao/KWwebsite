@@ -1,38 +1,37 @@
-                </div>
-                <!-- 内容区域结束 -->
-                
-                <!-- 页脚 -->
-                <footer class="text-center py-3 border-top bg-light">
-                    <div class="container-fluid">
-                        <div class="row">
-                            <div class="col-md-6 text-start">
-                                <small class="text-muted">
-                                    &copy; 2025 上海阔文展览展示服务有限公司 - 后台管理系统
-                                </small>
-                            </div>
-                            <div class="col-md-6 text-end">
-                                <small class="text-muted">
-                                    在线时间: <span id="onlineTime">00:00:00</span>
-                                </small>
-                            </div>
+            </div>
+            <!-- 页面内容结束 -->
+            
+            <!-- 页脚 -->
+            <footer class="bg-light border-top py-3 mt-auto">
+                <div class="container-fluid">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <small class="text-muted">
+                                &copy; <?php echo date('Y'); ?> 上海阔文展览展示服务有限公司. 保留所有权利.
+                            </small>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <small class="text-muted">
+                                后台管理系统 v1.0
+                                <span class="mx-2">|</span>
+                                在线时间: <span id="online-time"><?php echo timeAgo($_SESSION['login_time'] ?? time()); ?></span>
+                            </small>
                         </div>
                     </div>
-                </footer>
-            </div>
+                </div>
+            </footer>
         </div>
     </div>
     
-    <!-- 加载提示模态框 -->
-    <div class="modal fade" id="loadingModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
-        <div class="modal-dialog modal-dialog-centered modal-sm">
+    <!-- 全局加载提示 -->
+    <div class="modal fade" id="loadingModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
             <div class="modal-content">
-                <div class="modal-body text-center py-4">
-                    <div class="spinner-border text-primary" role="status">
+                <div class="modal-body text-center">
+                    <div class="spinner-border text-primary me-2" role="status">
                         <span class="visually-hidden">加载中...</span>
                     </div>
-                    <div class="mt-3">
-                        <span id="loadingText">处理中，请稍候...</span>
-                    </div>
+                    <span>处理中，请稍候...</span>
                 </div>
             </div>
         </div>
@@ -43,14 +42,11 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">
-                        <i class="bi bi-exclamation-triangle text-warning me-2"></i>
-                        确认删除
-                    </h5>
+                    <h5 class="modal-title">确认删除</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p id="deleteMessage">确定要删除这个项目吗？此操作不可撤销。</p>
+                    <p class="mb-0">您确定要删除这条记录吗？此操作无法撤销。</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
@@ -60,112 +56,64 @@
         </div>
     </div>
     
-    <!-- Bootstrap 5 JS -->
+    <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- jQuery -->
-    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
-    <!-- 自定义JS -->
-    <script src="assets/js/admin.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Custom JS -->
+    <script src="/admin/assets/js/admin.js"></script>
+    
+    <!-- 额外的JS文件 -->
+    <?php if (isset($extraJS)): ?>
+        <?php foreach ($extraJS as $js): ?>
+            <script src="<?php echo $js; ?>"></script>
+        <?php endforeach; ?>
+    <?php endif; ?>
     
     <script>
-        // 全局配置
-        window.AdminConfig = {
-            baseUrl: '',
-            csrfToken: '<?= Security::generateCSRFToken() ?>',
-            userId: <?= $_SESSION['admin_user_id'] ?>,
-            username: '<?= htmlspecialchars($_SESSION['admin_username']) ?>'
+        // 全局变量
+        window.adminConfig = {
+            baseUrl: '/admin',
+            csrfToken: '<?php echo Security::generateCSRFToken(); ?>',
+            currentUser: <?php echo json_encode(Security::getCurrentUser()); ?>
         };
         
-        // 页面加载完成后初始化
-        $(document).ready(function() {
-            if (typeof Admin !== 'undefined') {
-                Admin.init();
-            }
-            
-            // 初始化提示信息自动隐藏
-            $('.alert').each(function() {
-                const alert = this;
-                setTimeout(function() {
-                    $(alert).fadeOut();
-                }, 5000);
-            });
-            
-            // 在线时间计时器
-            let startTime = new Date().getTime();
-            setInterval(function() {
-                let currentTime = new Date().getTime();
-                let onlineTime = Math.floor((currentTime - startTime) / 1000);
-                let hours = Math.floor(onlineTime / 3600);
-                let minutes = Math.floor((onlineTime % 3600) / 60);
-                let seconds = onlineTime % 60;
-                
-                $('#onlineTime').text(
-                    String(hours).padStart(2, '0') + ':' +
-                    String(minutes).padStart(2, '0') + ':' +
-                    String(seconds).padStart(2, '0')
-                );
-            }, 1000);
+        // 菜单切换
+        document.getElementById('menu-toggle').addEventListener('click', function() {
+            document.getElementById('wrapper').classList.toggle('toggled');
         });
         
-        // 修改密码功能
-        function changePassword() {
-            // 这里可以添加修改密码的模态框或跳转
-            alert('修改密码功能开发中...');
+        // 自动隐藏alert消息
+        setTimeout(function() {
+            $('.alert').fadeOut();
+        }, 5000);
+        
+        // 更新在线时间
+        function updateOnlineTime() {
+            const loginTime = <?php echo $_SESSION['login_time'] ?? time(); ?>;
+            const now = Math.floor(Date.now() / 1000);
+            const onlineSeconds = now - loginTime;
+            
+            let timeStr = '';
+            if (onlineSeconds < 60) {
+                timeStr = onlineSeconds + '秒';
+            } else if (onlineSeconds < 3600) {
+                timeStr = Math.floor(onlineSeconds / 60) + '分钟';
+            } else {
+                const hours = Math.floor(onlineSeconds / 3600);
+                const minutes = Math.floor((onlineSeconds % 3600) / 60);
+                timeStr = hours + '小时' + (minutes > 0 ? minutes + '分钟' : '');
+            }
+            
+            const onlineTimeElement = document.getElementById('online-time');
+            if (onlineTimeElement) {
+                onlineTimeElement.textContent = timeStr;
+            }
         }
         
-        // 全局AJAX错误处理
-        $(document).ajaxError(function(event, jqXHR, ajaxSettings, thrownError) {
-            console.error('AJAX错误:', thrownError);
-            
-            if (jqXHR.status === 401) {
-                alert('登录已过期，请重新登录');
-                window.location.href = 'index.php';
-            } else if (jqXHR.status === 403) {
-                alert('权限不足');
-            } else if (jqXHR.status === 500) {
-                alert('服务器错误，请稍后重试');
-            }
-        });
-        
-        // 全局表单提交处理
-        $('form[data-ajax="true"]').on('submit', function(e) {
-            e.preventDefault();
-            
-            const form = $(this);
-            const submitBtn = form.find('button[type="submit"]');
-            const originalText = submitBtn.text();
-            
-            // 显示加载状态
-            submitBtn.prop('disabled', true).html('<i class="spinner-border spinner-border-sm me-2"></i>提交中...');
-            
-            $.ajax({
-                url: form.attr('action'),
-                method: form.attr('method') || 'POST',
-                data: form.serialize(),
-                dataType: 'json',
-                success: function(response) {
-                    if (response.success) {
-                        Admin.showAlert('success', response.message || '操作成功');
-                        
-                        // 如果有重定向URL，则跳转
-                        if (response.redirect) {
-                            setTimeout(function() {
-                                window.location.href = response.redirect;
-                            }, 1500);
-                        }
-                    } else {
-                        Admin.showAlert('danger', response.message || '操作失败');
-                    }
-                },
-                error: function() {
-                    Admin.showAlert('danger', '网络错误，请稍后重试');
-                },
-                complete: function() {
-                    // 恢复按钮状态
-                    submitBtn.prop('disabled', false).text(originalText);
-                }
-            });
-        });
+        // 每分钟更新一次在线时间
+        setInterval(updateOnlineTime, 60000);
+        updateOnlineTime();
     </script>
 </body>
 </html>

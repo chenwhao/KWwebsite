@@ -11,13 +11,25 @@ require_once __DIR__ . '/functions.php';
 
 requireLogin();
 
+// 定义网站根URL，方便管理
+// 如果您的后台不在根目录，请修改这里。例如：define('BASE_URL', '/admin');
+define('BASE_URL', '');
+
 // 设置默认值
 $pageTitle = $pageTitle ?? '阔文展览后台管理系统';
 $currentPage = $currentPage ?? '';
 $currentModule = $currentModule ?? '';
 
 // 生成面包屑
-$breadcrumb = generateBreadcrumb($pageTitle, $currentModule);
+$breadcrumb = generateBreadcrumb($pageTitle, $currentModule, BASE_URL);
+
+/**
+ * 一个辅助函数，用于生成带BASE_URL的链接
+ */
+function url(string $path): string {
+    return BASE_URL . '/' . ltrim($path, '/');
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -31,7 +43,7 @@ $breadcrumb = generateBreadcrumb($pageTitle, $currentModule);
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <!-- 自定义CSS -->
-    <link href="assets/css/admin.css" rel="stylesheet">
+    <link href="<?= url('assets/css/admin.css') ?>" rel="stylesheet">
     
     <style>
         :root {
@@ -133,7 +145,7 @@ $breadcrumb = generateBreadcrumb($pageTitle, $currentModule);
                 </div>
                 
                 <nav class="nav flex-column">
-                    <a class="nav-link <?= $currentPage === 'dashboard' ? 'active' : '' ?>" href="dashboard.php">
+                    <a class="nav-link <?= $currentPage === 'dashboard' ? 'active' : '' ?>" href="<?= url('dashboard.php') ?>">
                         <i class="bi bi-speedometer2 me-2"></i>
                         仪表板
                     </a>
@@ -143,22 +155,22 @@ $breadcrumb = generateBreadcrumb($pageTitle, $currentModule);
                             内容管理
                         </h6>
                         
-                        <a class="nav-link <?= $currentModule === 'company' ? 'active' : '' ?>" href="modules/company/index.php">
+                        <a class="nav-link <?= $currentModule === 'company' ? 'active' : '' ?>" href="<?= url('modules/company/index.php') ?>">
                             <i class="bi bi-building me-2"></i>
                             公司信息
                         </a>
                         
-                        <a class="nav-link <?= $currentModule === 'services' ? 'active' : '' ?>" href="modules/services/index.php">
+                        <a class="nav-link <?= $currentModule === 'services' ? 'active' : '' ?>" href="<?= url('modules/services/index.php') ?>">
                             <i class="bi bi-gear me-2"></i>
                             服务项目
                         </a>
                         
-                        <a class="nav-link <?= $currentModule === 'cases' ? 'active' : '' ?>" href="modules/cases/index.php">
+                        <a class="nav-link <?= $currentModule === 'cases' ? 'active' : '' ?>" href="<?= url('modules/cases/index.php') ?>">
                             <i class="bi bi-images me-2"></i>
                             案例管理
                         </a>
                         
-                        <a class="nav-link <?= $currentModule === 'news' ? 'active' : '' ?>" href="modules/news/index.php">
+                        <a class="nav-link <?= $currentModule === 'news' ? 'active' : '' ?>" href="<?= url('modules/news/index.php') ?>">
                             <i class="bi bi-newspaper me-2"></i>
                             新闻管理
                         </a>
@@ -169,7 +181,7 @@ $breadcrumb = generateBreadcrumb($pageTitle, $currentModule);
                             互动管理
                         </h6>
                         
-                        <a class="nav-link <?= $currentModule === 'messages' ? 'active' : '' ?>" href="modules/messages/index.php">
+                        <a class="nav-link <?= $currentModule === 'messages' ? 'active' : '' ?>" href="<?= url('modules/messages/index.php') ?>">
                             <i class="bi bi-chat-dots me-2"></i>
                             留言管理
                         </a>
@@ -180,13 +192,13 @@ $breadcrumb = generateBreadcrumb($pageTitle, $currentModule);
                             系统管理
                         </h6>
                         
-                        <a class="nav-link <?= $currentModule === 'files' ? 'active' : '' ?>" href="modules/files/index.php">
+                        <a class="nav-link <?= $currentModule === 'files' ? 'active' : '' ?>" href="<?= url('modules/files/index.php') ?>">
                             <i class="bi bi-folder me-2"></i>
                             文件管理
                         </a>
                         
                         <?php if ($_SESSION['admin_role'] === 'super_admin'): ?>
-                        <a class="nav-link <?= $currentModule === 'users' ? 'active' : '' ?>" href="modules/users/index.php">
+                        <a class="nav-link <?= $currentModule === 'users' ? 'active' : '' ?>" href="<?= url('modules/users/index.php') ?>">
                             <i class="bi bi-people me-2"></i>
                             用户管理
                         </a>
@@ -224,11 +236,11 @@ $breadcrumb = generateBreadcrumb($pageTitle, $currentModule);
                                 快捷操作
                             </button>
                             <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="modules/cases/edit.php"><i class="bi bi-images me-2"></i>添加案例</a></li>
-                                <li><a class="dropdown-item" href="modules/news/edit.php"><i class="bi bi-newspaper me-2"></i>发布新闻</a></li>
-                                <li><a class="dropdown-item" href="modules/services/edit.php"><i class="bi bi-gear me-2"></i>添加服务</a></li>
+                                <li><a class="dropdown-item" href="<?= url('modules/cases/edit.php') ?>"><i class="bi bi-images me-2"></i>添加案例</a></li>
+                                <li><a class="dropdown-item" href="<?= url('modules/news/edit.php') ?>"><i class="bi bi-newspaper me-2"></i>发布新闻</a></li>
+                                <li><a class="dropdown-item" href="<?= url('modules/services/edit.php') ?>"><i class="bi bi-gear me-2"></i>添加服务</a></li>
                                 <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="modules/files/index.php"><i class="bi bi-folder me-2"></i>文件管理</a></li>
+                                <li><a class="dropdown-item" href="<?= url('modules/files/index.php') ?>"><i class="bi bi-folder me-2"></i>文件管理</a></li>
                             </ul>
                         </div>
                         
@@ -248,7 +260,7 @@ $breadcrumb = generateBreadcrumb($pageTitle, $currentModule);
                             <ul class="dropdown-menu dropdown-menu-end">
                                 <li><h6 class="dropdown-header">消息通知</h6></li>
                                 <?php if ($pending_messages > 0): ?>
-                                <li><a class="dropdown-item" href="modules/messages/index.php">
+                                <li><a class="dropdown-item" href="<?= url('modules/messages/index.php') ?>">
                                     <i class="bi bi-chat-dots me-2"></i>
                                     <?= $pending_messages ?> 条新留言
                                 </a></li>
@@ -274,7 +286,7 @@ $breadcrumb = generateBreadcrumb($pageTitle, $currentModule);
                                     <i class="bi bi-key me-2"></i>修改密码
                                 </a></li>
                                 <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item text-danger" href="logout.php">
+                                <li><a class="dropdown-item text-danger" href="<?= url('logout.php') ?>">
                                     <i class="bi bi-box-arrow-right me-2"></i>退出登录
                                 </a></li>
                             </ul>

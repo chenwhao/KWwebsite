@@ -1,61 +1,64 @@
 <?php
 /**
  * 数据库配置文件
- * 阔文展览后台管理系统 - 最终版本
+ * 阔文展览后台管理系统
  */
 
-// 数据库配置 - 请根据您的实际配置修改
+// 数据库配置
 define('DB_HOST', 'localhost');
 define('DB_NAME', 'kuowen_exhibition');
-define('DB_USER', 'kuowen_admin');              // 请修改为您的数据库用户名
-define('DB_PASS', 'your_password_here');       // 请修改为您的数据库密码
+define('DB_USER', 'root');
+define('DB_PASS', '');
 define('DB_CHARSET', 'utf8mb4');
 
-/**
- * 数据库连接类
- */
+// 数据库连接类
 class Database {
-    private static $instance = null;
-    private $connection;
+    private $host = DB_HOST;
+    private $db_name = DB_NAME;
+    private $username = DB_USER;
+    private $password = DB_PASS;
+    private $charset = DB_CHARSET;
+    private $conn;
 
-    private function __construct() {
+    public function connect() {
+        $this->conn = null;
+        
         try {
-            $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=" . DB_CHARSET;
+            $dsn = "mysql:host=" . $this->host . ";dbname=" . $this->db_name . ";charset=" . $this->charset;
             $options = [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES => false,
             ];
             
-            $this->connection = new PDO($dsn, DB_USER, DB_PASS, $options);
+            $this->conn = new PDO($dsn, $this->username, $this->password, $options);
+            
         } catch(PDOException $e) {
             error_log("数据库连接错误: " . $e->getMessage());
             throw new Exception("数据库连接失败");
         }
+        
+        return $this->conn;
     }
-
-    public static function getInstance() {
-        if (self::$instance === null) {
-            self::$instance = new self();
-        }
-        return self::$instance;
-    }
-
+    
     public function getConnection() {
-        return $this->connection;
+        if ($this->conn === null) {
+            $this->connect();
+        }
+        return $this->conn;
     }
 }
 
-/**
- * 获取数据库连接
- */
+// 全局数据库连接函数
 function getDB() {
-    return Database::getInstance()->getConnection();
+    static $database = null;
+    if ($database === null) {
+        $database = new Database();
+    }
+    return $database->getConnection();
 }
 
-/**
- * 执行查询
- */
+// 执行查询的辅助函数
 function executeQuery($sql, $params = []) {
     try {
         $db = getDB();
@@ -68,33 +71,25 @@ function executeQuery($sql, $params = []) {
     }
 }
 
-/**
- * 获取单条记录
- */
+// 获取单条记录
 function fetchOne($sql, $params = []) {
     $stmt = executeQuery($sql, $params);
     return $stmt->fetch();
 }
 
-/**
- * 获取多条记录
- */
+// 获取多条记录
 function fetchAll($sql, $params = []) {
     $stmt = executeQuery($sql, $params);
     return $stmt->fetchAll();
 }
 
-/**
- * 插入记录并返回ID
- */
+// 插入记录并返回ID
 function insertRecord($sql, $params = []) {
     executeQuery($sql, $params);
     return getDB()->lastInsertId();
 }
 
-/**
- * 更新/删除记录并返回影响行数
- */
+// 更新/删除记录并返回影响行数
 function updateRecord($sql, $params = []) {
     $stmt = executeQuery($sql, $params);
     return $stmt->rowCount();
